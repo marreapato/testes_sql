@@ -187,5 +187,77 @@ FROM
     TABLE(v.compras) c;
 
 ----------------
+DROP TYPE ESTADIA_TP;
+CREATE TYPE ESTADIA_TP AS OBJECT(
+
+ pk_cod_estadia INTEGER,
+ valor_estadia NUMBER(38,2),
+ data_check_in DATE,
+ data_check_out DATE,
+ reservas tp_nt_ref_relac
+ 
+);
+
+--DROP TABLE ESTADIA;
+
+CREATE TABLE ESTADIA OF ESTADIA_TP(
+ CONSTRAINT cod_estadia_pkey PRIMARY KEY(pk_cod_estadia)
+)NESTED TABLE RESERVAS STORE AS LISTA_RESERVAS;
 
 
+-- Inserting reservation data into ESTADIA table
+INSERT INTO ESTADIA VALUES (
+    2001,          -- pk_cod_estadia
+    300.00,        -- valor_estadia
+    TO_DATE('2024-07-01', 'YYYY-MM-DD'),  -- data_check_in
+    TO_DATE('2024-07-05', 'YYYY-MM-DD'),  -- data_check_out
+    tp_nt_ref_relac(
+        tp_ref_relac(
+            (SELECT REF(p) FROM PASSAGEIRO_TB p WHERE p.PK_CPF = '12345678901'),
+            (SELECT REF(pt) FROM PASSAGEM pt WHERE pt.pk_numero_passagem = 1001)
+        ),
+        tp_ref_relac(
+            (SELECT REF(p) FROM PASSAGEIRO_TB p WHERE p.PK_CPF = '98765432101'),
+            (SELECT REF(pt) FROM PASSAGEM pt WHERE pt.pk_numero_passagem = 1002)
+        )
+    )
+);
+
+-- Inserting more reservation data into ESTADIA table
+INSERT INTO ESTADIA VALUES (
+    2002,          -- pk_cod_estadia
+    400.00,        -- valor_estadia
+    TO_DATE('2024-08-15', 'YYYY-MM-DD'),  -- data_check_in
+    TO_DATE('2024-08-20', 'YYYY-MM-DD'),  -- data_check_out
+    tp_nt_ref_relac(
+        tp_ref_relac(
+            (SELECT REF(p) FROM PASSAGEIRO_TB p WHERE p.PK_CPF = '98765432101'),
+            (SELECT REF(pt) FROM PASSAGEM pt WHERE pt.pk_numero_passagem = 1001)
+        )
+    )
+);
+
+
+SELECT
+    e.pk_cod_estadia AS stay_id,
+    e.valor_estadia AS stay_cost,
+    e.data_check_in AS check_in_date,
+    e.data_check_out AS check_out_date,
+    DEREF(r.passageiros).PK_CPF AS passenger_cpf,
+    DEREF(r.passageiros).NOME AS passenger_name,
+    DEREF(r.passagem).pk_numero_passagem AS ticket_number,
+    DEREF(r.passagem).valor_passagem AS ticket_price,
+    DEREF(r.passagem).data_ida AS departure_date,
+    DEREF(r.passagem).data_chegada AS arrival_date
+FROM
+    ESTADIA e,
+    TABLE(e.reservas) r;
+
+
+-- ENTIDADE HOTEL
+CREATE TYPE HOTEL_TP AS OBJECT(
+
+    pkid_hotel INTEGER,
+    nome VARCHAR2(30),
+    endereco_hotel tp_endereco
+);
