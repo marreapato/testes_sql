@@ -53,10 +53,32 @@ ALTER TABLE ESTADIAS_TAB MODIFY(
 );
 
 INSERT INTO hotel_table VALUES (1, 'Hotel A', tp_endereco('Brasil', '12345-678', 'São Paulo', 'São Paulo', '456 Oak St'), 
-TP_NT_ESTADIAS(estadia_tp(3, 100.00, TO_DATE('2024-04-22', 'YYYY-MM-DD'), TO_DATE('2024-04-25', 'YYYY-MM-DD')),
-estadia_tp(4, 150.00, TO_DATE('2024-05-01', 'YYYY-MM-DD'), TO_DATE('2024-05-05', 'YYYY-MM-DD')))
+TP_NT_ESTADIAS(estadia_tp(1, 100.00, TO_DATE('2024-04-22', 'YYYY-MM-DD'), TO_DATE('2024-04-25', 'YYYY-MM-DD')),
+estadia_tp(2, 150.00, TO_DATE('2024-05-01', 'YYYY-MM-DD'), TO_DATE('2024-05-05', 'YYYY-MM-DD')))
 );
 
 SELECT * FROM HOTEL_TABLE;
 
+SELECT h.pkid_hotel, h.nome AS hotel_nome,
+       e.pk_cod_estadia,
+       e.valor_estadia,
+       e.data_check_in,
+       e.data_check_out
+FROM hotel_table h,
+     TABLE(h.estadias_list) e;
+
+SELECT *
+FROM TABLE(SELECT d.ESTADIAS_LIST
+FROM hotel_table d
+WHERE d.PKID_HOTEL = 1);
+
 SELECT * FROM estadias_tab;
+
+-- Inserção de nova estadia
+INSERT INTO TABLE (
+    SELECT h.estadias_list
+    FROM hotel_table h
+    WHERE pkid_hotel = 1
+)
+VALUES (3, 100.00, TO_DATE('2024-04-22', 'YYYY-MM-DD'), TO_DATE('2024-04-25', 'YYYY-MM-DD'));
+
