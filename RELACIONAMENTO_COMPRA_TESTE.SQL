@@ -185,3 +185,7 @@ SELECT
 FROM
     VOO_TABLE v,
     TABLE(v.compras) c;
+
+----------------
+
+
