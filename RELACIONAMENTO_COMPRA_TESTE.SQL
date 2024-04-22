@@ -174,3 +174,14 @@ SELECT
 FROM
     VOO_TABLE v,
     TABLE(v.compras) c;
+
+
+
+SELECT DEREF(C.PASSAGEIROS).NOME FROM LISTA_COMPRAS C;
+
+SELECT
+    v.pk_localizador_voo AS flight_id,
+    DEREF(c.passageiros).PK_CPF AS passenger_cpf
+FROM
+    VOO_TABLE v,
+    TABLE(v.compras) c;
