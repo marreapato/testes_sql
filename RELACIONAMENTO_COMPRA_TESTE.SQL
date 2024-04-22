@@ -252,6 +252,15 @@ SELECT
 FROM
     ESTADIA e,
     TABLE(e.reservas) r;
+------------
+
+CREATE OR REPLACE TYPE tp_ref_registrada AS OBJECT(
+passageiros REF TP_PASSAGEIRO,
+estadias REF ESTADIA_TP) NOT FINAL;
+/
+    
+CREATE TYPE tp_nt_ref_registrada AS TABLE OF tp_ref_registrada;
+/
 
 
 -- ENTIDADE HOTEL
@@ -259,5 +268,58 @@ CREATE TYPE HOTEL_TP AS OBJECT(
 
     pkid_hotel INTEGER,
     nome VARCHAR2(30),
-    endereco_hotel tp_endereco
+    endereco_hotel tp_endereco,
+    registros tp_nt_ref_registrada
 );
+
+
+
+CREATE TABLE HOTEL OF HOTEL_TP(
+    CONSTRAINT hotel_pkey PRIMARY KEY (pkid_hotel)
+)NESTED TABLE REGISTROS STORE AS LISTA_REGISTROS;
+
+
+-- Inserting hotel data into HOTEL table
+INSERT INTO HOTEL VALUES (
+    1,                          -- pkid_hotel
+    'Grand Hotel',              -- nome
+    tp_endereco('USA', '54321', 'New York', 'Manhattan', '123 Main St'),  -- endereco_hotel
+    tp_nt_ref_registrada(
+        tp_ref_registrada(
+            (SELECT REF(p) FROM PASSAGEIRO_TB p WHERE p.PK_CPF = '12345678901'),
+            (SELECT REF(e) FROM ESTADIA e WHERE e.pk_cod_estadia = 2001)
+        ),
+        tp_ref_registrada(
+            (SELECT REF(p) FROM PASSAGEIRO_TB p WHERE p.PK_CPF = '98765432101'),
+            (SELECT REF(e) FROM ESTADIA e WHERE e.pk_cod_estadia = 2002)
+        )
+    )
+);
+
+-- Inserting more hotel data into HOTEL table
+INSERT INTO HOTEL VALUES (
+    2,                          -- pkid_hotel
+    'Beach Resort',             -- nome
+    tp_endereco('USA', '90210', 'California', 'Santa Monica', '456 Beach Blvd'),  -- endereco_hotel
+    tp_nt_ref_registrada(
+        tp_ref_registrada(
+            (SELECT REF(p) FROM PASSAGEIRO_TB p WHERE p.PK_CPF = '98765432101'),
+            (SELECT REF(e) FROM ESTADIA e WHERE e.pk_cod_estadia = 2001)
+        )
+    )
+);
+
+SELECT
+    h.pkid_hotel AS hotel_id,
+    h.nome AS hotel_name,
+    h.endereco_hotel.pais AS country,
+    h.endereco_hotel.cidade AS city,
+    DEREF(r.passageiros).PK_CPF AS passenger_cpf,
+    DEREF(r.passageiros).NOME AS passenger_name,
+    DEREF(r.estadias).pk_cod_estadia AS stay_id,
+    DEREF(r.estadias).valor_estadia AS stay_cost,
+    DEREF(r.estadias).data_check_in AS check_in_date,
+    DEREF(r.estadias).data_check_out AS check_out_date
+FROM
+    HOTEL h,
+    TABLE(h.registros) r;
