@@ -236,6 +236,48 @@ BEGIN
 END;
 /
 
+EXEC SetAttributeToNull(2005,1);
+
+CREATE OR REPLACE PROCEDURE SetAttributeToNull(
+    p_estadia_id IN ESTADIA.pk_cod_estadia%TYPE,
+    p_index IN NUMBER
+) AS
+    v_reservas tp_nt_ref_relac; -- Nested table type
+    v_ref_relac tp_ref_relac; -- Reference type
+
+BEGIN
+    -- Retrieve the nested table for the specified ESTADIA record
+    SELECT e.reservas
+    INTO v_reservas
+    FROM ESTADIA e
+    WHERE e.pk_cod_estadia = p_estadia_id;
+
+    -- Check if the index is within the bounds of the nested table
+    IF p_index > 0 AND p_index <= v_reservas.COUNT THEN
+        -- Get the specific tp_ref_relac() object at the specified index
+        v_ref_relac := v_reservas(p_index);
+
+        -- Update the attribute value to NULL (example: setting passageiros attribute to NULL)
+        v_ref_relac.passageiros := NULL;
+
+        -- Update the nested table in the ESTADIA record with the modified object
+        v_reservas(p_index) := v_ref_relac;
+
+        -- Update the ESTADIA record with the modified nested table
+        UPDATE ESTADIA e
+        SET e.reservas = v_reservas
+        WHERE e.pk_cod_estadia = p_estadia_id;
+
+        COMMIT; -- Commit the transaction
+        DBMS_OUTPUT.PUT_LINE('Attribute set to NULL successfully.');
+    ELSE
+        DBMS_OUTPUT.PUT_LINE('Invalid index.');
+    END IF;
+EXCEPTION
+    WHEN OTHERS THEN
+        DBMS_OUTPUT.PUT_LINE('Error: ' || SQLERRM);
+END;
+/
 
 
 
