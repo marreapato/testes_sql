@@ -342,7 +342,6 @@ INSERT INTO ESTADIA VALUES (
     )
 );
 
-EXEC CLEAR_RESERVAS_WITH_NULL_PASSAGEM();
 SELECT * FROM ESTADIA;
 
 -- Insert new reservation data into the nested table for ESTADIA record with PK_COD_ESTADIA = 2001
@@ -374,62 +373,6 @@ FROM
     TABLE(e.reservas) r;
 ------------
 
-EXEC CLEAR_RESERVAS_WITH_NULL_CPF();
-
-CREATE OR REPLACE PROCEDURE CLEAR_RESERVAS_WITH_NULL_PASSAGEM IS
-    
-    -- Declare an empty collection of the appropriate type
-    v_empty_reservas tp_nt_ref_relac := tp_nt_ref_relac();
-    
-BEGIN
-    -- Iterate over each ESTADIA record that meets the criteria
-    FOR est IN (SELECT e.pk_cod_estadia
-                FROM ESTADIA e
-                WHERE EXISTS (
-                    SELECT 1
-                    FROM TABLE(e.reservas) r
-                    WHERE r.PASSAGEM IS NULL  -- Adjust this condition based on your requirements
-                ))
-    LOOP
-        -- Clear the nested table (replace with an empty collection)
-        UPDATE ESTADIA e
-        SET e.reservas = v_empty_reservas
-        WHERE e.pk_cod_estadia = est.pk_cod_estadia;
-    END LOOP;
-
-    -- Commit the transaction at the end of the procedure
-    COMMIT;
-    
-END CLEAR_RESERVAS_WITH_NULL_PASSAGEM;
-/
-
-CREATE OR REPLACE PROCEDURE CLEAR_RESERVAS_WITH_NULL_CPF IS
-     
-    -- Declare an empty collection of the appropriate type
-    v_empty_reservas tp_nt_ref_relac := tp_nt_ref_relac();
-    
-BEGIN
-    -- Iterate over each ESTADIA record that meets the criteria
-    FOR est IN (SELECT e.pk_cod_estadia
-                FROM ESTADIA e
-                WHERE EXISTS (
-                    SELECT 1
-                    FROM TABLE(e.reservas) r
-                    WHERE r.passageiros IS NULL  -- Check for NULL PK_CPF
-                ))
-    LOOP
-        -- Clear the nested table (replace with an empty collection)
-        UPDATE ESTADIA e
-        SET e.reservas = v_empty_reservas
-        WHERE e.pk_cod_estadia = est.pk_cod_estadia;
-    END LOOP;
-
-    -- Commit the transaction at the end of the procedure
-    COMMIT;
-    
-END CLEAR_RESERVAS_WITH_NULL_CPF;
-/
-
     
 CREATE OR REPLACE TYPE tp_ref_registrada AS OBJECT(
 passageiros REF TP_PASSAGEIRO,
@@ -458,7 +401,7 @@ CREATE TABLE HOTEL OF HOTEL_TP(
 
 -- Inserting hotel data into HOTEL table
 INSERT INTO HOTEL VALUES (
-    10,                          -- pkid_hotel
+    15,                          -- pkid_hotel
     'Grand Hotel',              -- nome
     tp_endereco('USA', '54321', 'New York', 'Manhattan', '123 Main St'),  -- endereco_hotel
     tp_nt_ref_registrada(
@@ -468,20 +411,20 @@ INSERT INTO HOTEL VALUES (
         ),
         tp_ref_registrada(
             (SELECT REF(p) FROM PASSAGEIRO_TB p WHERE p.PK_CPF = '98765432101'),
-            (SELECT REF(e) FROM ESTADIA e WHERE e.pk_cod_estadia = 2002)
+            (SELECT REF(e) FROM ESTADIA e WHERE e.pk_cod_estadia = 202)
         )
     )
 );
 
 -- Inserting more hotel data into HOTEL table
 INSERT INTO HOTEL VALUES (
-    9,                          -- pkid_hotel
+    91,                          -- pkid_hotel
     'Beach Resort',             -- nome
     tp_endereco('USA', '90210', 'California', 'Santa Monica', '456 Beach Blvd'),  -- endereco_hotel
     tp_nt_ref_registrada(
         tp_ref_registrada(
             (SELECT REF(p) FROM PASSAGEIRO_TB p WHERE p.PK_CPF = '98765430101'),
-            (SELECT REF(e) FROM ESTADIA e WHERE e.pk_cod_estadia = 2001)
+            (SELECT REF(e) FROM ESTADIA e WHERE e.pk_cod_estadia = 301)
         )
     )
 );
@@ -503,26 +446,3 @@ FROM
     TABLE(h.registros) r;
 
 EXEC CLEAR_HOTEL_WITH_NULL_CPF();
-
-CREATE OR REPLACE PROCEDURE CLEAR_HOTEL_WITH_NULL_CPF IS
-BEGIN
-    -- Iterate over each HOTEL record that meets the criteria
-    FOR h IN (SELECT h.pkid_hotel
-              FROM HOTEL h
-              WHERE EXISTS (
-                  SELECT 1
-                  FROM TABLE(h.registros) r
-                  WHERE r.passageiros IS NULL  -- Check for NULL passageiros
-              ))
-    LOOP
-        -- Set the registros nested table to NULL for the current HOTEL record
-        UPDATE HOTEL
-        SET registros = NULL
-        WHERE pkid_hotel = h.pkid_hotel;
-    END LOOP;
-
-    -- Commit the transaction at the end of the procedure
-    COMMIT;
-END CLEAR_HOTEL_WITH_NULL_CPF;
-/
-
