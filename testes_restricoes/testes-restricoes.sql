@@ -45,7 +45,7 @@ CREATE TYPE MAIOR_IDADE_TP UNDER TP_PASSAGEIRO(
 
 --DROP TYPE MENOR_IDADE_TP;
 CREATE TYPE MENOR_IDADE_TP UNDER TP_PASSAGEIRO(
-    autorizacao_viagem varchar2(3)  
+    acompanhamento_especial varchar2(3)  
 );
 
 
@@ -65,6 +65,105 @@ CONSTRAINT CPF_UNICO_PASSAGEIRO PRIMARY KEY (PK_CPF)
 CREATE TABLE MENOR_IDADE_TB OF MENOR_IDADE_TP;
 
 CREATE TABLE MAIOR_IDADE_TB OF MAIOR_IDADE_TP;
+
+
+CREATE OR REPLACE FUNCTION calcular_idade_trigger(data_nascimento DATE) RETURN NUMBER IS
+BEGIN
+    RETURN TRUNC(MONTHS_BETWEEN(SYSDATE, data_nascimento) / 12);
+END calcular_idade_trigger;
+
+
+CREATE OR REPLACE TRIGGER idade_passageiro_trigger
+BEFORE INSERT ON PASSAGEIRO_TB
+FOR EACH ROW
+DECLARE
+    v_idade NUMBER;
+    v_acompanhamento_especial VARCHAR2(3);
+BEGIN
+    -- Calcula a idade do novo passageiro
+    v_idade := calcular_idade_trigger(:new.DATA_NASCIMENTO);
+
+    -- Determina o valor de autorizacao_viagem com base na idade
+    IF v_idade < 16 THEN
+        v_acompanhamento_especial := 'sim';
+    ELSIF v_idade >= 16 AND v_idade < 18 THEN
+        v_acompanhamento_especial := 'nao';
+    ELSE
+        v_acompanhamento_especial := NULL; -- Você pode definir outro valor padrão se necessário
+    END IF;
+
+    -- Insere na tabela apropriada
+    IF v_idade < 18 THEN
+        -- Inserir na tabela MENOR_IDADE_TB
+        INSERT INTO MENOR_IDADE_TB (PK_CPF, NOME, SEXO, DATA_NASCIMENTO, ENDERECO_PAX, TELEFONES, EMAIL, acompanhamento_especial)
+        VALUES (:new.PK_CPF, :new.NOME, :new.SEXO, :new.DATA_NASCIMENTO, :new.ENDERECO_PAX, :new.TELEFONES, :new.EMAIL, v_acompanhamento_especial);
+    ELSE
+        -- Inserir na tabela MAIOR_IDADE_TB
+        INSERT INTO MAIOR_IDADE_TB (PK_CPF, NOME, SEXO, DATA_NASCIMENTO, ENDERECO_PAX, TELEFONES, EMAIL)
+        VALUES (:new.PK_CPF, :new.NOME, :new.SEXO, :new.DATA_NASCIMENTO, :new.ENDERECO_PAX, :new.TELEFONES, :new.EMAIL);
+    END IF;
+END;
+/
+
+
+CREATE OR REPLACE PROCEDURE MoveRecordsToMaiorIdade AS
+    CURSOR menor_cursor IS
+        SELECT *
+        FROM MENOR_IDADE_TB;
+
+    v_idade NUMBER;
+BEGIN
+    -- Loop through the cursor to process each record in MENOR_IDADE_TB
+    FOR menor_rec IN menor_cursor LOOP
+        -- Calculate age using the calcular_idade_trigger function
+        v_idade := calcular_idade_trigger(menor_rec.DATA_NASCIMENTO);
+
+        -- Check if the age is 18 years or older
+        IF v_idade >= 18 THEN
+            -- Insert the record into MAIOR_IDADE_TB
+            INSERT INTO MAIOR_IDADE_TB (
+                PK_CPF,
+                NOME,
+                SEXO,
+                DATA_NASCIMENTO,
+                ENDERECO_PAX,
+                TELEFONES,
+                EMAIL
+            ) VALUES (
+                menor_rec.PK_CPF,
+                menor_rec.NOME,
+                menor_rec.SEXO,
+                menor_rec.DATA_NASCIMENTO,
+                menor_rec.ENDERECO_PAX,
+                menor_rec.TELEFONES,
+                menor_rec.EMAIL
+            );
+
+            -- Delete the record from MENOR_IDADE_TB
+            DELETE FROM MENOR_IDADE_TB
+            WHERE PK_CPF = menor_rec.PK_CPF; -- Assuming PK_CPF is the primary key
+        END IF;
+    END LOOP;
+
+    -- Commit the transaction to apply changes
+    COMMIT;
+END MoveRecordsToMaiorIdade;
+/
+
+CREATE OR REPLACE PROCEDURE UpdateAcompanhamentoViagem AS
+BEGIN
+  
+    UPDATE MENOR_IDADE_TB
+    SET ACOMPANHAMENTO_ESPECIAL = 'nao'
+    WHERE calcular_idade_trigger(DATA_NASCIMENTO) >= 16;
+    
+    -- Commit the transaction to apply changes
+    COMMIT;
+    
+    -- Display a success message
+    DBMS_OUTPUT.PUT_LINE('Acompanhamento Viagem updated successfully.');
+END UpdateAcompanhamentoViagem;
+
 ----
 
 --DROP TABLE PASSAGEM;
@@ -115,11 +214,17 @@ INSERT INTO PASSAGEIRO_TB VALUES (
     '98765432101',    -- PK_CPF
     'Jane Smith',     -- NOME
     'F',              -- SEXO
-    TO_DATE('1985-10-20', 'YYYY-MM-DD'),  -- DATA_NASCIMENTO
+    TO_DATE('2012-10-20', 'YYYY-MM-DD'),  -- DATA_NASCIMENTO
     tp_endereco('USA', '54321', 'New York', 'Manhattan', 'Apt 456'), -- ENDERECO_PAX
     tp_fones(TP_FONE('001', '456', '1234567')), -- TELEFONES
     'janesmith@example.com'  -- EMAIL
 );
+
+
+SELECT T.CALCULAR_IDADE() FROM MENOR_IDADE_TB T;
+
+SELECT * FROM MENOR_IDADE_TB;
+
 
 -------------------------------
 
@@ -138,7 +243,6 @@ INSERT INTO PASSAGEM VALUES (
     TO_DATE('2024-06-20', 'YYYY-MM-DD'),  -- data_ida
     TO_DATE('2024-06-25', 'YYYY-MM-DD')   -- data_chegada
 );
-
 
 -- Inserting flight data
 INSERT INTO VOO_TABLE VALUES (
@@ -178,18 +282,7 @@ FROM
 
 
 
-SELECT DEREF(C.PASSAGEM).PK_NUMERO_PASSAGEM FROM LISTA_COMPRAS C;
-
-SELECT DEREF(C.PASSAGEM).PK_NUMERO_PASSAGEM,
-       COUNT(*) AS occurrence_count
-FROM LISTA_COMPRAS C
-WHERE C.PASSAGEM IS NOT NULL
-GROUP BY DEREF(C.PASSAGEM).PK_NUMERO_PASSAGEM
-HAVING COUNT(*) > 1;
-
-
-
-
+SELECT DEREF(C.PASSAGEIROS).NOME FROM LISTA_COMPRAS C;
 
 SELECT
     v.pk_localizador_voo AS flight_id,
@@ -199,7 +292,7 @@ FROM
     TABLE(v.compras) c;
 
 ----------------
-DROP TYPE ESTADIA_TP;
+--DROP TYPE ESTADIA_TP;
 CREATE TYPE ESTADIA_TP AS OBJECT(
 
  pk_cod_estadia INTEGER,
@@ -212,89 +305,58 @@ CREATE TYPE ESTADIA_TP AS OBJECT(
 
 --DROP TABLE ESTADIA;
 
-SELECT DEREF(r.PASSAGEM).PK_NUMERO_PASSAGEM
-FROM ESTADIA e,
-     TABLE(e.reservas) r;
+CREATE TABLE ESTADIA OF ESTADIA_TP(
+ CONSTRAINT cod_estadia_pkey PRIMARY KEY(pk_cod_estadia)
+)NESTED TABLE RESERVAS STORE AS LISTA_RESERVAS;
 
 
-DECLARE
-    v_count NUMBER;
-BEGIN
-    -- Iterate over each ESTADIA record
-    FOR est IN (SELECT e.pk_cod_estadia
-                FROM ESTADIA e
-                WHERE (SELECT COUNT(DISTINCT DEREF(r.PASSAGEM).PK_NUMERO_PASSAGEM)
-                       FROM TABLE(e.reservas) r) = 1)
-    LOOP
-        -- Clear the nested table (replace with an empty collection)
-        UPDATE ESTADIA e
-        SET e.reservas = tp_nt_ref_relac() -- Use the appropriate empty collection type
-        WHERE e.pk_cod_estadia = est.pk_cod_estadia;
-    END LOOP;
-
-    COMMIT; -- Commit the transaction
-END;
-/
-
-EXEC SetAttributeToNull(2005,1);
-
-CREATE OR REPLACE PROCEDURE SetAttributeToNull(
-    p_estadia_id IN ESTADIA.pk_cod_estadia%TYPE,
-    p_index IN NUMBER
-) AS
-    v_reservas tp_nt_ref_relac; -- Nested table type
-    v_ref_relac tp_ref_relac; -- Reference type
-
-BEGIN
-    -- Retrieve the nested table for the specified ESTADIA record
-    SELECT e.reservas
-    INTO v_reservas
-    FROM ESTADIA e
-    WHERE e.pk_cod_estadia = p_estadia_id;
-
-    -- Check if the index is within the bounds of the nested table
-    IF p_index > 0 AND p_index <= v_reservas.COUNT THEN
-        -- Get the specific tp_ref_relac() object at the specified index
-        v_ref_relac := v_reservas(p_index);
-
-        -- Update the attribute value to NULL (example: setting passageiros attribute to NULL)
-        v_ref_relac.passageiros := NULL;
-
-        -- Update the nested table in the ESTADIA record with the modified object
-        v_reservas(p_index) := v_ref_relac;
-
-        -- Update the ESTADIA record with the modified nested table
-        UPDATE ESTADIA e
-        SET e.reservas = v_reservas
-        WHERE e.pk_cod_estadia = p_estadia_id;
-
-        COMMIT; -- Commit the transaction
-        DBMS_OUTPUT.PUT_LINE('Attribute set to NULL successfully.');
-    ELSE
-        DBMS_OUTPUT.PUT_LINE('Invalid index.');
-    END IF;
-EXCEPTION
-    WHEN OTHERS THEN
-        DBMS_OUTPUT.PUT_LINE('Error: ' || SQLERRM);
-END;
-/
-
-
+-- Inserting reservation data into ESTADIA table
+INSERT INTO ESTADIA VALUES (
+    2001,          -- pk_cod_estadia
+    300.00,        -- valor_estadia
+    TO_DATE('2024-07-01', 'YYYY-MM-DD'),  -- data_check_in
+    TO_DATE('2024-07-05', 'YYYY-MM-DD'),  -- data_check_out
+    tp_nt_ref_relac(
+        tp_ref_relac(
+            (SELECT REF(p) FROM PASSAGEIRO_TB p WHERE p.PK_CPF = '12345678901'),
+            (SELECT REF(pt) FROM PASSAGEM pt WHERE pt.pk_numero_passagem = 1001)
+        ),
+        tp_ref_relac(
+            (SELECT REF(p) FROM PASSAGEIRO_TB p WHERE p.PK_CPF = '98765432101'),
+            (SELECT REF(pt) FROM PASSAGEM pt WHERE pt.pk_numero_passagem = 1002)
+        )
+    )
+);
 
 -- Inserting more reservation data into ESTADIA table
 INSERT INTO ESTADIA VALUES (
-    2005,          -- pk_cod_estadia
+    2004,          -- pk_cod_estadia
     400.00,        -- valor_estadia
     TO_DATE('2024-08-15', 'YYYY-MM-DD'),  -- data_check_in
     TO_DATE('2024-08-20', 'YYYY-MM-DD'),  -- data_check_out
     tp_nt_ref_relac(
         tp_ref_relac(
-            (SELECT REF(p) FROM PASSAGEIRO_TB p WHERE p.PK_CPF = '98765432101'),
-            (SELECT REF(pt) FROM PASSAGEM pt WHERE pt.pk_numero_passagem = 1001)
+            (SELECT REF(p) FROM PASSAGEIRO_TB p WHERE p.PK_CPF = '98765434101'),
+            (SELECT REF(pt) FROM PASSAGEM pt WHERE pt.pk_numero_passagem = 1002)
         )
     )
 );
 
+EXEC CLEAR_RESERVAS_WITH_NULL_PASSAGEM();
+SELECT * FROM ESTADIA;
+
+-- Insert new reservation data into the nested table for ESTADIA record with PK_COD_ESTADIA = 2001
+INSERT INTO TABLE(
+    SELECT e.reservas
+    FROM ESTADIA e
+    WHERE e.pk_cod_estadia = 2001
+)
+VALUES (
+    tp_ref_relac(
+        (SELECT REF(p) FROM PASSAGEIRO_TB p WHERE p.PK_CPF = '11122233344'),
+        (SELECT REF(pt) FROM PASSAGEM pt WHERE pt.PK_NUMERO_PASSAGEM = 1001)
+    )
+);
 
 SELECT
     e.pk_cod_estadia AS stay_id,
@@ -312,6 +374,63 @@ FROM
     TABLE(e.reservas) r;
 ------------
 
+EXEC CLEAR_RESERVAS_WITH_NULL_CPF();
+
+CREATE OR REPLACE PROCEDURE CLEAR_RESERVAS_WITH_NULL_PASSAGEM IS
+    
+    -- Declare an empty collection of the appropriate type
+    v_empty_reservas tp_nt_ref_relac := tp_nt_ref_relac();
+    
+BEGIN
+    -- Iterate over each ESTADIA record that meets the criteria
+    FOR est IN (SELECT e.pk_cod_estadia
+                FROM ESTADIA e
+                WHERE EXISTS (
+                    SELECT 1
+                    FROM TABLE(e.reservas) r
+                    WHERE r.PASSAGEM IS NULL  -- Adjust this condition based on your requirements
+                ))
+    LOOP
+        -- Clear the nested table (replace with an empty collection)
+        UPDATE ESTADIA e
+        SET e.reservas = v_empty_reservas
+        WHERE e.pk_cod_estadia = est.pk_cod_estadia;
+    END LOOP;
+
+    -- Commit the transaction at the end of the procedure
+    COMMIT;
+    
+END CLEAR_RESERVAS_WITH_NULL_PASSAGEM;
+/
+
+CREATE OR REPLACE PROCEDURE CLEAR_RESERVAS_WITH_NULL_CPF IS
+     
+    -- Declare an empty collection of the appropriate type
+    v_empty_reservas tp_nt_ref_relac := tp_nt_ref_relac();
+    
+BEGIN
+    -- Iterate over each ESTADIA record that meets the criteria
+    FOR est IN (SELECT e.pk_cod_estadia
+                FROM ESTADIA e
+                WHERE EXISTS (
+                    SELECT 1
+                    FROM TABLE(e.reservas) r
+                    WHERE r.passageiros IS NULL  -- Check for NULL PK_CPF
+                ))
+    LOOP
+        -- Clear the nested table (replace with an empty collection)
+        UPDATE ESTADIA e
+        SET e.reservas = v_empty_reservas
+        WHERE e.pk_cod_estadia = est.pk_cod_estadia;
+    END LOOP;
+
+    -- Commit the transaction at the end of the procedure
+    COMMIT;
+    
+END CLEAR_RESERVAS_WITH_NULL_CPF;
+/
+
+    
 CREATE OR REPLACE TYPE tp_ref_registrada AS OBJECT(
 passageiros REF TP_PASSAGEIRO,
 estadias REF ESTADIA_TP) NOT FINAL;
@@ -339,7 +458,7 @@ CREATE TABLE HOTEL OF HOTEL_TP(
 
 -- Inserting hotel data into HOTEL table
 INSERT INTO HOTEL VALUES (
-    1,                          -- pkid_hotel
+    10,                          -- pkid_hotel
     'Grand Hotel',              -- nome
     tp_endereco('USA', '54321', 'New York', 'Manhattan', '123 Main St'),  -- endereco_hotel
     tp_nt_ref_registrada(
@@ -356,16 +475,17 @@ INSERT INTO HOTEL VALUES (
 
 -- Inserting more hotel data into HOTEL table
 INSERT INTO HOTEL VALUES (
-    2,                          -- pkid_hotel
+    9,                          -- pkid_hotel
     'Beach Resort',             -- nome
     tp_endereco('USA', '90210', 'California', 'Santa Monica', '456 Beach Blvd'),  -- endereco_hotel
     tp_nt_ref_registrada(
         tp_ref_registrada(
-            (SELECT REF(p) FROM PASSAGEIRO_TB p WHERE p.PK_CPF = '98765432101'),
+            (SELECT REF(p) FROM PASSAGEIRO_TB p WHERE p.PK_CPF = '98765430101'),
             (SELECT REF(e) FROM ESTADIA e WHERE e.pk_cod_estadia = 2001)
         )
     )
 );
+SELECT * FROM HOTEL;
 
 SELECT
     h.pkid_hotel AS hotel_id,
@@ -381,3 +501,28 @@ SELECT
 FROM
     HOTEL h,
     TABLE(h.registros) r;
+
+EXEC CLEAR_HOTEL_WITH_NULL_CPF();
+
+CREATE OR REPLACE PROCEDURE CLEAR_HOTEL_WITH_NULL_CPF IS
+BEGIN
+    -- Iterate over each HOTEL record that meets the criteria
+    FOR h IN (SELECT h.pkid_hotel
+              FROM HOTEL h
+              WHERE EXISTS (
+                  SELECT 1
+                  FROM TABLE(h.registros) r
+                  WHERE r.passageiros IS NULL  -- Check for NULL passageiros
+              ))
+    LOOP
+        -- Set the registros nested table to NULL for the current HOTEL record
+        UPDATE HOTEL
+        SET registros = NULL
+        WHERE pkid_hotel = h.pkid_hotel;
+    END LOOP;
+
+    -- Commit the transaction at the end of the procedure
+    COMMIT;
+END CLEAR_HOTEL_WITH_NULL_CPF;
+/
+
